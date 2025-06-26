@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Rock Paper Scissors</title>
+    <style type="text/css">    
+        canvas {
+            border: 1px solid black;
+        }
+
+        .hand {
+            cursor: pointer;
+            border-radius: 10px;
+            padding: 8px;
+        }
+
+        .hand:disabled {
+            opacity: 0.5;
+        }
+
+        .hand img {
+            image-rendering: pixelated;
+        }
+
+        .hand button {
+            background-color: inherit;
+            border: 0;
+            border-radius: 10px;
+        }
+
+        .hand button.selected {
+            background-color: red;
+        }
+
+        .hand button:disabled {
+            opacity: 0.5;
+        }
+
+        .hand:hover {
+            background-color:  rgb(141, 141, 141);
+        }
+    </style>
+</head>
+
+<body>
+    <div>
+        <img height="100" width="300" src="images/Title.png" style="margin-left: 225px; margin-bottom: 20px;"/>
+    </div>
+    <div>
+        <button id="readybutton" style="margin-left: 330px; padding: 20px; margin-bottom: 20px;">Ready</button>
+    </div>
+
+    <canvas></canvas>
+    <div id="deinehand" style="display: none; margin-left: 220px; margin-top: 10px;">
+        <div style="display: flex; gap: 40px">
+            <div class="hand">
+                <button id="hand_schere">
+                    <img height="80" width="80" src="images/HandSchere.png" />
+                </button>
+            </div>
+            <div class="hand">
+                <button id="hand_stein">
+                    <img height="80" width="80" src="images/HandStein.png"/>
+                </button>
+            </div>
+            <div class="hand">
+                <button id="hand_papier">
+                    <img height="80" width="80" src="images/HandPapier.png"/>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    
+
+    <script>
+        const ws = new WebSocket("ws://localhost:8080");
+        const canvas = document.querySelector("canvas");
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+        let myLifeValue = 100;
+        let otherLifeValue = 100;
+            
+            canvas.width = 800;
+            canvas.height = 380;
+
+
+        
+            function renderScene() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height); // Canvas reset
+
+                    for (const sprite of sprites) {
+                        if (!sprite.visible) continue;
+
+                        const img = new Image();
+                        img.onload = function () {
+                            ctx.imageSmoothingEnabled = false;
+                            ctx.drawImage(img, sprite.x, sprite.y, sprite.w, sprite.h);
+                        };
+                        img.src = sprite.src;
+                    }
+                    // mein Leben
+                    const myBarWidth = 150 / 100 * myLifeValue;
+                    ctx.fillStyle = "blue";
+                    ctx.fillRect(45, 47, myBarWidth, 16);
+                    // Gegner Leben
+                    const otherBarWidth = 150 / 100 * otherLifeValue;
+                    ctx.fillStyle = "red";
+                    ctx.fillRect(595, 47, otherBarWidth, 16);
+                }
+
+                // Canvas Grafiken Inventar
+                    const sprites = [
+                            { src: "images/HandSchereEnemy.png", x:550, y: 150, w: 100, h: 100, visible: false },
+                            { src: "images/HandSteinEnemy.png", x: 550, y: 150, w: 100, h: 100, visible: false },
+                            { src: "images/HandPapierEnemy.png", x: 550, y: 150, w: 100, h: 100, visible: false },
+                            { src: "images/Head.png", x: 10, y: 200, w: 150, h: 150, visible: true },
+                            { src: "images/HeadHit.png", x: 10, y: 200, w: 150, h: 150, visible: false },
+                            { src: "images/HeadEnemy.png", x: 640, y: 120, w: 150, h: 150, visible: true },
+                            { src: "images/HeadEnemyHit.png", x: 640, y: 120, w: 150, h: 150, visible: false },
+                            { src: "images/Healthbar.png", x: 30, y: 30, w: 180, h: 50, visible: true },
+                            { src: "images/Healthbar.png", x: 580, y: 30, w: 180, h: 50, visible: true },
+                        ];
+
+
+
+        ws.onopen = function () {
+            console.log("Wir sind mit Server verbunden", ws.id)
+            renderScene()
+        };
+    
+        ws.onmessage = function (message) 
+        {
+            if (message.data.indexOf("ID") == 0)
+            {
+                ws.id = message.data.split("|")[1];
+            }
+            else if (message.data == "selecthand")
+            {
+                document.querySelector("#deinehand").style.display = "block";
+                document.querySelector("#hand_schere").disabled = false;
+                document.querySelector("#hand_stein").disabled = false;
+                document.querySelector("#hand_papier").disabled = false;
+                console.log("Meine ID: ", ws.id)
+                renderScene()
+                
+            }
+            else if (message.data.indexOf("WIN") >= 0 || message.data.indexOf("LOSE") >= 0)
+            {
+                const winner = message.data.indexOf("WIN") == 0;
+                const life = message.data.split("|")[1];
+                const playerid = message.data.split("|")[2];
+                const healthbarIndex = 0;
+
+                if (playerid == ws.id)
+                {
+                    // ich
+                    myLifeValue = parseInt(life);
+                    
+                    // Animation Hit
+                    if (!winner)
+                    {
+                        sprites.find(s => s.src.includes("HeadHit")).visible = true;
+                        sprites.find(s => s.src.includes("Head.png")).visible = false;
+                        renderScene();
+                        playSound("sounds/gotHit.wav");
+
+                        setTimeout(() => {
+                            sprites.find(s => s.src.includes("HeadHit")).visible = false;
+                            sprites.find(s => s.src.includes("Head.png")).visible = true;
+                            renderScene();
+                        }, 500);
+                    }
+                } 
+                else 
+                {   
+                    // der andere
+                    otherLifeValue = parseInt(life);
+                    console.log("other player life is", life, playerid);
+
+                    // Animation Hit
+                    if (!winner)
+                    {
+                        sprites.find(s => s.src.includes("HeadEnemyHit")).visible = true;
+                        sprites.find(s => s.src.includes("HeadEnemy.png")).visible = false;
+                        renderScene();
+                        playSound("sounds/hit.mp3");
+
+                        setTimeout(() => {
+                            sprites.find(s => s.src.includes("HeadEnemyHit")).visible = false;
+                            sprites.find(s => s.src.includes("HeadEnemy.png")).visible = true;
+                            renderScene();
+                        }, 500);
+                    }
+                }
+            }
+            else if (message.data == "newgame")
+            {
+                document.querySelector("#hand_schere").disabled = false;
+                document.querySelector("#hand_stein").disabled = false;
+                document.querySelector("#hand_papier").disabled = false;
+                clearSelectedHands();
+            }
+            else if (message.data == "finish")
+            {
+                document.querySelector("#deinehand").style.display = "none";
+                document.querySelector("#hand_schere").disabled = true;
+                document.querySelector("#hand_stein").disabled = true;
+                document.querySelector("#hand_papier").disabled = true;
+                const readyButton = document.querySelector("#readybutton"); 
+                readyButton.disabled = false; 
+                readyButton.innerText = "Ready";
+                clearSelectedHands();
+                if (myLifeValue != 0) {
+                    playSound("sounds/won.mp3");
+                }
+                else {
+                    playSound("sounds/lost.mp3");
+                }
+            }
+            
+        };
+
+        // Button click Event
+        document.querySelector("#readybutton").addEventListener("click", () => {
+            clearSelectedHands();
+            ws.send("ready"); // wir schicken dem Server das Wort ready
+            const readyButton = document.querySelector("#readybutton");
+            readyButton.disabled = true; // Button disable
+            readyButton.innerText = "waiting...";
+            
+            myLifeValue = 100;
+            otherLifeValue = 100;
+            renderScene();
+        });
+
+
+        // Auswahl der Hand
+        document.querySelector("#hand_schere").addEventListener("click", () => {
+                ws.send("schere");
+                document.querySelector("#hand_schere").disabled = true;
+                document.querySelector("#hand_stein").disabled = true;
+                document.querySelector("#hand_papier").disabled = true;
+                
+                clearSelectedHands();
+                document.querySelector("#hand_schere").classList.add("selected");
+                playSound("sounds/select.mp3");
+            });
+        document.querySelector("#hand_stein").addEventListener("click", () => {
+                ws.send("stein");
+                document.querySelector("#hand_schere").disabled = true;
+                document.querySelector("#hand_stein").disabled = true;
+                document.querySelector("#hand_papier").disabled = true;
+
+                clearSelectedHands();
+                document.querySelector("#hand_stein").classList.add("selected");
+                playSound("sounds/select.mp3");
+            });    
+        document.querySelector("#hand_papier").addEventListener("click", () => {
+                ws.send("papier");
+                document.querySelector("#hand_schere").disabled = true;
+                document.querySelector("#hand_stein").disabled = true;
+                document.querySelector("#hand_papier").disabled = true;
+
+                clearSelectedHands();
+                document.querySelector("#hand_papier").classList.add("selected");
+                playSound("sounds/select.mp3");
+            });
+            
+            // Funktion Sound abspielen
+            function playSound(fileName)
+            {
+                const audioCtx = new AudioContext();
+                const audio = new Audio(fileName);
+                const source = audioCtx.createMediaElementSource(audio);
+                source.connect(audioCtx.destination);
+                audio.play();
+            }
+
+            // Funktion entfernt aus allen Händen die Klasse selected
+            function clearSelectedHands()
+            {
+                const alleHaende = document.querySelectorAll(".hand button");
+                alleHaende.forEach((button) => button.classList.remove("selected"));
+            }
+    </script>
+</body>
+
+</html>
